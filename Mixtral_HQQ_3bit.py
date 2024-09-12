@@ -5,7 +5,7 @@ from hqq.core.quantize import *
 
 
 model_id      = "mistralai/Mixtral-8x7B-v0.1" 
-mytoken       = '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'
+mytoken       = '...'
 # cache_path    = '/scratch/bcjw/bhuang4/cache'
 # model_path    = '/scratch/bcjw/bhuang4/mixtral_offloading/noIns_myQuant_HQQ_att4_exp4_axis1'
 compute_dtype = torch.float16
