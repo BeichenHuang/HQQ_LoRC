@@ -19,8 +19,10 @@ class BaseHQQHFModel(BaseHQQModel):
             if key in kwargs:
                 model_kwargs[key] = kwargs[key]
 
+        print(cls.get_config_file(save_dir))
         config = transformers.AutoConfig.from_pretrained(
-            cls.get_config_file(save_dir)
+            #cls.get_config_file(save_dir)
+            "deepseek-ai/deepseek-moe-16b-base" 
         )
 
         auto_class = transformers.AutoModel

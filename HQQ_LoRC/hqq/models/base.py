@@ -611,7 +611,7 @@ class BaseHQQModel:
                 for name, module in model.named_modules():
                     if type(module) == HQQLinear: 
                         if low_rank_only:
-                            if ("experts.w1" in name) or ("experts.w3" in name): continue
+                            if ("w1" in name) or ("w3" in name): continue
                         with open('/u/bhuang4/MoE_quant/HQQ_LoRC/weight_size.pkl', 'rb') as f:
                             loaded_layer_info = pickle.load(f)
                             orig_shape = loaded_layer_info[name]
