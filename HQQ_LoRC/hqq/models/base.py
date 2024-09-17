@@ -593,15 +593,21 @@ class BaseHQQModel:
             return dequantized_weight.half()
 
         @torch.no_grad()
-        def load_UV_int8(model,LoRC_weight_path):
+        def load_UV_int8(model,LoRC_weight_path, low_rank_only = False):
                 if LoRC_weight_path == None: 
                     print("LoRC_weight_path wrong")
                     return             
+                print(low_rank_only)
                 for name, module in model.named_modules():      
                     if type(module) == HQQLinear:             
-                        module.U = UV_int8_dequantize(LoRC_weight_path,'U',name)    
-                        module.V = UV_int8_dequantize(LoRC_weight_path,'V',name)
-                        module.name = name
+                        # error_list = ['mlp']
+                        lora_list = ['q_proj', 'k_proj', 'mlp']
+                        if any(key in name for key in lora_list) or not low_rank_only:
+                            module.U = UV_int8_dequantize(LoRC_weight_path,'U',name)    
+                            module.V = UV_int8_dequantize(LoRC_weight_path,'V',name)
+                            module.name = name
+                            if low_rank_only:
+                                print(name)
 
         def load_UV_int3(model,LoRC_weight_path,low_rank_only = False, symm_flag = False):
                 if LoRC_weight_path == None: 
@@ -669,7 +675,7 @@ class BaseHQQModel:
         if LoRC_dtype == "half":
             load_UV_half(model, LoRC_weight_path)
         elif LoRC_dtype == "int8":
-            load_UV_int8(model, LoRC_weight_path)
+            load_UV_int8(model, LoRC_weight_path,low_rank_only=low_rank_only)
         elif LoRC_dtype == "int3":
             load_UV_int3(model, LoRC_weight_path,low_rank_only=low_rank_only,symm_flag = False,)
         elif LoRC_dtype == "int3_symm":

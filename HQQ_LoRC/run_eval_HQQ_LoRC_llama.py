@@ -1,7 +1,7 @@
 from safetensors import safe_open
 import torch
 from hqq.core.quantize import *
-from hqq.models.hf.mixtral import MixtralHQQ as AutoHQQHFModel
+from hqq.models.hf.llama import LlamaHQQ as AutoHQQHFModel
 from hqq.engine.hf import AutoTokenizer
 import gc
 import sys
@@ -12,14 +12,14 @@ gc.collect()
 import argparse
 
 
-model_id       = "deepseek-ai/deepseek-moe-16b-base" 
+model_id       = "meta-llama/Llama-2-7b-hf" 
 device         = 'cuda:0'
-model_path     = '/u/yyuan6/hqq_lorc/deepseek-moe/deepseek-moe-16b-3bit-quantized' 
+model_path     = '/u/yyuan6/hqq_lorc/llama/llama-3bit-quantized' 
 
 
 def main():
     parser = argparse.ArgumentParser(description="HQQ_LoRC")
-    parser.add_argument('Error_path', type=str, help="Error_path")
+    parser.add_argument('--Error_path', type=str, help="Error_path")
     parser.add_argument('--LoRC_dtype', type=str, default ='int8', help="LoRC_dtype")
     parser.add_argument('--exp_rank', type=int, help="exp_rank")
     parser.add_argument('--attn_rank', type=int, help="attn_rank")

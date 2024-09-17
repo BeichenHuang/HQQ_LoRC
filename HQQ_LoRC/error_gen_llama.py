@@ -2,7 +2,7 @@ from safetensors.torch import save_file
 from safetensors import safe_open
 import torch
 from hqq.core.quantize import *
-from hqq.models.hf.mixtral import MixtralHQQ as AutoHQQHFModel
+from hqq.models.hf.llama import LlamaHQQ as AutoHQQHFModel
 import gc,os
 import argparse
 torch.cuda.empty_cache()
@@ -65,7 +65,7 @@ def full_to_int3_symmetric(tensor_in):
 def Error_gen(save_path, 
               exp_rank = 8,
               attn_rank = 8,
-              model_path = '/projects/bcvk/bhuang4/mixtral_quant/noIns_myQuant_HQQ_3bit_gs64',
+              model_path = '/u/yyuan6/hqq_lorc/llama/llama-3bit-quantized',
               quant = 'int8',
               low_rank_only = False):
     print(f"==== Doing Error_gen for exp_rank {exp_rank}, attn_rank {attn_rank}====")
@@ -78,44 +78,69 @@ def Error_gen(save_path,
     all_V_h_q_weight = {}
     all_V_h_q_scale = {}
     all_V_h_q_zero = {}
+    average_L2 = {}
+    average_rank = {}
 
 
     # count = torch.load('/u/bhuang4/mixtral_offloading/HQQ_LoRC/routing-count.pt')
     # _, indices = count.sort(dim=1, descending=True)
     # rank_list = [8,8,8,8,8,8,16,16]
 
-    quant_list = ["experts","self_attn"]
-    fpath = "/projects/bcvk/bhuang4/huggingface_model/hub/models--mistralai--Mixtral-8x7B-v0.1/snapshots/ffe1a706bacbd5abddc5ff99432ee38f7e0662fb"
+    fpath = "/u/yyuan6/hqq_lorc/llama/models--meta-llama--Llama-2-7b-hf/snapshots/01c7f73d771dfac7d292323805ebc428287df4f9"
     model = AutoHQQHFModel.from_quantized(model_path)
-    for f_idx in range(1,20):
-        fname = f"{fpath}/model-{f_idx:05}-of-00019.safetensors"
+    # quant_list = ["mlp","self_attn"]
+    quant_list = ['proj']
+    print(quant_list)
+    for f_idx in range(1,3):
+        fname = f"{fpath}/model-{f_idx:05}-of-00002.safetensors"
         with safe_open(fname, framework="pt", device="cuda") as f:
             for key in f.keys():
-                print(key)
+                # print(key)
                 if not any(q in key for q in quant_list): continue
+                # print(key)
                 layer_name = key[:-len(".weight")]
                 W_orig = f.get_tensor(key)    #get the unquanzited weight
                 layer_q = dict(model.named_modules())[layer_name]
                 W_q = layer_q.dequantize()    #get the HQQ quntized weight
                 U, S, V = torch.linalg.svd(W_orig.float() - W_q.float(), full_matrices=False)  #do SVD to error matrix
+                
+                error_matrix = W_orig.float() - W_q.float()
+                l2norm = torch.norm(error_matrix, p='fro')
+                num_elements = error_matrix.numel()
+                l2norm = l2norm / torch.sqrt(torch.tensor(num_elements, dtype=torch.float))
+
+                p_half_norm = torch.norm(error_matrix, p=0.5)
+
+
+                num_elements = error_matrix.numel()
+                normalized_p_half_norm = p_half_norm / (num_elements ** (1 / 0.5))
+
+                # Define a tolerance to treat very small singular values as zero
+                max_S = torch.max(S)
+                tolerance = max_S * 0.5
+                error_matrix_rank = torch.sum(S > tolerance)
+                print(f"{key}: Rank: {error_matrix_rank.item()}, L2-norm:{l2norm.item()}, L0.5-norm:{normalized_p_half_norm.item()}")
+
+                mean_error = torch.mean(torch.abs(error_matrix))
+                std_error = torch.std(torch.abs(error_matrix))
+                cv = std_error / mean_error
+                print("Coefficient of Variation (CV):", cv.item())
+
+                if key[-17:-7] in average_L2:
+                    average_L2[key[-17:-7]] += l2norm.item()
+                    average_rank[key[-17:-7]] += error_matrix_rank.item()
+                else:
+                    average_L2[key[-17:-7]] = l2norm.item()
+                    average_rank[key[-17:-7]] = error_matrix_rank.item()
+
                 del W_orig,W_q
                 S = torch.diag(S)
-                if low_rank_only:
-                    if 'w2' in key:
-                        rank = exp_rank
-                    elif 'w1' in key:
-                        print(f"Layer: {layer_name} skip")
-                        continue
-                    elif 'w3' in key:
-                        print(f"Layer: {layer_name} skip")
-                        continue
-                    else:
-                        rank = attn_rank
+
+                if 'mlp' in key:
+                    rank = exp_rank
                 else:
-                    if 'experts' in key:
-                        rank = exp_rank
-                    else:
-                        rank = attn_rank
+                    rank = attn_rank
+
                 # if 'experts' in key:
                 #     layer_pattern = r"layers.(\d+)"
                 #     exp_pattern = r"experts.(\d+)"
@@ -192,7 +217,9 @@ def Error_gen(save_path,
                 # all_E_int8_zero[layer_name] = zero.to('cpu')
                 del U,S,V,U_h,V_h
                 gc.collect()
-                print(f"Layer: {layer_name} done")
+                # print(f"Layer: {layer_name} done")
+            for key, value in average_L2.items():
+                print(f"{key}: L2norm={value / 32}, rank={average_rank[key]/32}")
 
     os.makedirs(save_path,exist_ok = True)
     if quant == 'int8':
@@ -228,7 +255,7 @@ def main():
     # 添加参数
     parser.add_argument('--exp_rank', type=int, nargs='?', default=8, help="exp_rank")
     parser.add_argument('--attn_rank', type=int, nargs='?', default=8, help="attn_rank")
-    parser.add_argument('--model_path', type=str,nargs='?', default='/projects/bcvk/bhuang4/mixtral_quant/noIns_myQuant_HQQ_3bit_gs64', help="model_path")
+    parser.add_argument('--model_path', type=str,nargs='?', default='/u/yyuan6/hqq_lorc/llama/llama-3bit-quantized', help="model_path")
     parser.add_argument('--error_quant',type = str, nargs='?',default='int8')
     parser.add_argument('--save_path',type = str)
     parser.add_argument('--low_rank_only',type = bool, nargs='?',default=False)

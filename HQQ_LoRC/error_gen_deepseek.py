@@ -89,6 +89,9 @@ def Error_gen(save_path,
     # quant_list = ["mlp","self_attn"]
     quant_list = model.linear_tags + ['gate_proj', 'up_proj', 'down_proj']
     print(quant_list)
+    average_rank = {}
+    average_L2 = {}
+    item_count = {}
     for f_idx in range(1,8):
         fname = f"{fpath}/model-{f_idx:05}-of-00007.safetensors"
         with safe_open(fname, framework="pt", device="cuda") as f:
@@ -102,10 +105,36 @@ def Error_gen(save_path,
                 W_q = layer_q.dequantize()    #get the HQQ quntized weight
                 U, S, V = torch.linalg.svd(W_orig.float() - W_q.float(), full_matrices=False)  #do SVD to error matrix
                 
+                error_matrix = W_orig.float() - W_q.float()
+                l2norm = torch.norm(error_matrix, p='fro')
+                num_elements = error_matrix.numel()
+                l2norm = l2norm / torch.sqrt(torch.tensor(num_elements, dtype=torch.float))
+
+                p_half_norm = torch.norm(error_matrix, p=0.5)
+
+
+                num_elements = error_matrix.numel()
+                normalized_p_half_norm = p_half_norm / (num_elements ** (1 / 0.5))
+
+                # Define a tolerance to treat very small singular values as zero
                 max_S = torch.max(S)
                 tolerance = max_S * 0.5
-                rank = torch.sum(S > tolerance)
-                print(f"{key}: Rank: {rank.item()}")
+                error_matrix_rank = torch.sum(S > tolerance)
+                print(f"{key}: Rank: {error_matrix_rank.item()}, L2-norm:{l2norm.item()}, L0.5-norm:{normalized_p_half_norm.item()}")
+
+                mean_error = torch.mean(torch.abs(error_matrix))
+                std_error = torch.std(torch.abs(error_matrix))
+                cv = std_error / mean_error
+                print("Coefficient of Variation (CV):", cv.item())
+
+                if key[-20:-7] in average_L2:
+                    average_L2[key[-20:-7]] += l2norm.item()
+                    item_count[key[-20:-7]] += 1
+                    average_rank[key[-20:-7]] += error_matrix_rank
+                else:
+                    average_L2[key[-20:-7]] = l2norm.item()
+                    item_count[key[-20:-7]] = 1
+                    average_rank[key[-20:-7]] = error_matrix_rank
 
                 del W_orig,W_q
                 S = torch.diag(S)
@@ -121,7 +150,7 @@ def Error_gen(save_path,
                     else:
                         rank = attn_rank
                 else:
-                    if 'experts' in key:
+                    if ('mlp.experts' in key):
                         rank = exp_rank
                     else:
                         rank = attn_rank
@@ -165,7 +194,7 @@ def Error_gen(save_path,
                 #     all_V_h_int8_scale[layer_name] = torch.ones(1,V_shape).to('cpu')
                 #     all_V_h_int8_zero[layer_name] = torch.zeros(1,V_shape).to('cpu')
                 #     continue
-                # print(f"rank is:{rank}")
+                print(f"rank is:{rank}")
                 U_h = U[:,:rank] @ torch.sqrt(S[:rank,:rank]) # calculate the U_h and V_h according to rank
                 V_h = torch.sqrt(S[:rank,:rank]) @ V[:rank,:] 
                 all_U_h_half[layer_name] = U_h.half().to('cpu')
@@ -202,6 +231,8 @@ def Error_gen(save_path,
                 del U,S,V,U_h,V_h
                 gc.collect()
                 # print(f"Layer: {layer_name} done")
+            for key, value in average_L2.items():
+                print(f"{key}: L2-norm={value / item_count[key]}, rank={average_rank[key]/item_count[key]}")
 
     os.makedirs(save_path,exist_ok = True)
     if quant == 'int8':

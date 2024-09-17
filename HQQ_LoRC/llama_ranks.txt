@@ -1,0 +1,227 @@
+exp rank: 8
+attn rank: 8
+orig model path: /u/yyuan6/hqq_lorc/llama/llama-3bit-quantized
+quant to: int8
+low rank only: False
+==== Doing Error_gen for exp_rank 8, attn_rank 8====
+/u/yyuan6/hqq_lorc/llama/llama-3bit-quantized/config.json
+['proj']
+model.layers.0.mlp.down_proj.weight: Rank: 3, L2-norm:0.003139524720609188, L0.5-norm:0.0023109540343284607
+Coefficient of Variation (CV): 0.6399024128913879
+rank is:8
+model.layers.0.mlp.gate_proj.weight: Rank: 73, L2-norm:0.0030407800804823637, L0.5-norm:0.002230849349871278
+Coefficient of Variation (CV): 0.6443862915039062
+rank is:8
+model.layers.0.mlp.up_proj.weight: Rank: 2548, L2-norm:0.0029880742076784372, L0.5-norm:0.002210406120866537
+Coefficient of Variation (CV): 0.6304637789726257
+rank is:8
+model.layers.0.self_attn.k_proj.weight: Rank: 217, L2-norm:0.0038100099191069603, L0.5-norm:0.00228302669711411
+Coefficient of Variation (CV): 0.9230285882949829
+rank is:8
+model.layers.0.self_attn.o_proj.weight: Rank: 3, L2-norm:0.0015198030741885304, L0.5-norm:0.0009926817147061229
+Coefficient of Variation (CV): 0.8134552240371704
+rank is:8
+model.layers.0.self_attn.q_proj.weight: Rank: 84, L2-norm:0.0034609518479555845, L0.5-norm:0.0018971340032294393
+Coefficient of Variation (CV): 1.0391823053359985
+rank is:8
+model.layers.0.self_attn.v_proj.weight: Rank: 620, L2-norm:0.0020909931045025587, L0.5-norm:0.0013885846128687263
+Coefficient of Variation (CV): 0.7894325256347656
+rank is:8
+model.layers.1.mlp.down_proj.weight: Rank: 2, L2-norm:0.003229706082493067, L0.5-norm:0.0023888538125902414
+Coefficient of Variation (CV): 0.6316079497337341
+rank is:8
+model.layers.1.mlp.gate_proj.weight: Rank: 5, L2-norm:0.003380047157406807, L0.5-norm:0.0024802577681839466
+Coefficient of Variation (CV): 0.6460129022598267
+rank is:8
+model.layers.1.mlp.up_proj.weight: Rank: 2, L2-norm:0.003178542712703347, L0.5-norm:0.0023546144366264343
+Coefficient of Variation (CV): 0.628873884677887
+rank is:8
+model.layers.1.self_attn.k_proj.weight: Rank: 521, L2-norm:0.005264219827950001, L0.5-norm:0.0030618575401604176
+Coefficient of Variation (CV): 0.9594773054122925
+rank is:8
+model.layers.1.self_attn.o_proj.weight: Rank: 5, L2-norm:0.0016526689287275076, L0.5-norm:0.0010741957230493426
+Coefficient of Variation (CV): 0.8101309537887573
+rank is:8
+model.layers.1.self_attn.q_proj.weight: Rank: 581, L2-norm:0.005227748770266771, L0.5-norm:0.0029902809765189886
+Coefficient of Variation (CV): 0.9741238355636597
+rank is:8
+model.layers.1.self_attn.v_proj.weight: Rank: 612, L2-norm:0.0019213795894756913, L0.5-norm:0.001299175899475813
+Coefficient of Variation (CV): 0.7556610107421875
+rank is:8
+model.layers.10.mlp.down_proj.weight: Rank: 1, L2-norm:0.0033137763384729624, L0.5-norm:0.0024535004049539566
+Coefficient of Variation (CV): 0.6295610666275024
+rank is:8
+model.layers.10.mlp.gate_proj.weight: Rank: 1288, L2-norm:0.003563998034223914, L0.5-norm:0.0025876229628920555
+Coefficient of Variation (CV): 0.6589277386665344
+rank is:8
+model.layers.10.mlp.up_proj.weight: Rank: 2557, L2-norm:0.003329526400193572, L0.5-norm:0.0024651119019836187
+Coefficient of Variation (CV): 0.6290240287780762
+rank is:8
+model.layers.10.self_attn.k_proj.weight: Rank: 1136, L2-norm:0.004814742598682642, L0.5-norm:0.0032936977222561836
+Coefficient of Variation (CV): 0.7378064393997192
+rank is:8
+model.layers.10.self_attn.o_proj.weight: Rank: 1, L2-norm:0.0026266295462846756, L0.5-norm:0.001934323227033019
+Coefficient of Variation (CV): 0.6374571919441223
+rank is:8
+model.layers.10.self_attn.q_proj.weight: Rank: 1135, L2-norm:0.004664520267397165, L0.5-norm:0.0032388465479016304
+Coefficient of Variation (CV): 0.7184006571769714
+rank is:8
+model.layers.10.self_attn.v_proj.weight: Rank: 1524, L2-norm:0.00266423006542027, L0.5-norm:0.001962248934432864
+Coefficient of Variation (CV): 0.6369026303291321
+rank is:8
+model.layers.11.mlp.down_proj.weight: Rank: 1, L2-norm:0.0033336409833282232, L0.5-norm:0.002468603663146496
+Coefficient of Variation (CV): 0.6295157074928284
+rank is:8
+model.layers.11.mlp.gate_proj.weight: Rank: 1291, L2-norm:0.003550542052835226, L0.5-norm:0.002585136331617832
+Coefficient of Variation (CV): 0.6548733711242676
+rank is:8
+model.layers.11.mlp.up_proj.weight: Rank: 2557, L2-norm:0.0033563964534550905, L0.5-norm:0.002485481556504965
+Coefficient of Variation (CV): 0.6287679672241211
+rank is:8
+model.layers.11.self_attn.k_proj.weight: Rank: 1009, L2-norm:0.00443259347230196, L0.5-norm:0.002988990396261215
+Coefficient of Variation (CV): 0.7584934234619141
+rank is:8
+model.layers.11.self_attn.o_proj.weight: Rank: 1, L2-norm:0.0027370895259082317, L0.5-norm:0.0020037461072206497
+Coefficient of Variation (CV): 0.6469187140464783
+rank is:8
+model.layers.11.self_attn.q_proj.weight: Rank: 564, L2-norm:0.004439885262399912, L0.5-norm:0.002997530624270439
+Coefficient of Variation (CV): 0.75965416431427
+rank is:8
+model.layers.11.self_attn.v_proj.weight: Rank: 1490, L2-norm:0.002781793475151062, L0.5-norm:0.0020390329882502556
+Coefficient of Variation (CV): 0.6437113285064697
+rank is:8
+model.layers.12.mlp.down_proj.weight: Rank: 1, L2-norm:0.003359781112521887, L0.5-norm:0.002488695317879319
+Coefficient of Variation (CV): 0.6287121772766113
+rank is:8
+model.layers.12.mlp.gate_proj.weight: Rank: 1405, L2-norm:0.003526466665789485, L0.5-norm:0.002572704805061221
+Coefficient of Variation (CV): 0.6518217921257019
+rank is:8
+model.layers.12.mlp.up_proj.weight: Rank: 2565, L2-norm:0.0033860187977552414, L0.5-norm:0.002508307807147503
+Coefficient of Variation (CV): 0.6282981038093567
+rank is:8
+model.layers.12.self_attn.k_proj.weight: Rank: 1103, L2-norm:0.004670924507081509, L0.5-norm:0.0032119951210916042
+Coefficient of Variation (CV): 0.731246292591095
+rank is:8
+model.layers.12.self_attn.o_proj.weight: Rank: 1, L2-norm:0.002706566359847784, L0.5-norm:0.0019857336301356554
+Coefficient of Variation (CV): 0.6435655355453491
+rank is:8
+model.layers.12.self_attn.q_proj.weight: Rank: 994, L2-norm:0.004529618192464113, L0.5-norm:0.003151379060000181
+Coefficient of Variation (CV): 0.7166986465454102
+rank is:8
+model.layers.12.self_attn.v_proj.weight: Rank: 1488, L2-norm:0.0027443142607808113, L0.5-norm:0.0020133161451667547
+Coefficient of Variation (CV): 0.6426334977149963
+rank is:8
+model.layers.13.mlp.down_proj.weight: Rank: 1, L2-norm:0.0033894379157572985, L0.5-norm:0.0025118463672697544
+Coefficient of Variation (CV): 0.6279391646385193
+rank is:8
+model.layers.13.mlp.gate_proj.weight: Rank: 1599, L2-norm:0.0035149988252669573, L0.5-norm:0.0025640474632382393
+Coefficient of Variation (CV): 0.6518603563308716
+rank is:8
+model.layers.13.mlp.up_proj.weight: Rank: 2550, L2-norm:0.0034201450180262327, L0.5-norm:0.0025319885462522507
+Coefficient of Variation (CV): 0.6291803121566772
+rank is:8
+model.layers.13.self_attn.k_proj.weight: Rank: 1071, L2-norm:0.004567802418023348, L0.5-norm:0.003163142129778862
+Coefficient of Variation (CV): 0.7223572134971619
+rank is:8
+model.layers.13.self_attn.o_proj.weight: Rank: 1, L2-norm:0.002801047172397375, L0.5-norm:0.002056609373539686
+Coefficient of Variation (CV): 0.6424213647842407
+rank is:8
+model.layers.13.self_attn.q_proj.weight: Rank: 1090, L2-norm:0.004486390855163336, L0.5-norm:0.0031304992735385895
+Coefficient of Variation (CV): 0.7126933932304382
+rank is:8
+model.layers.13.self_attn.v_proj.weight: Rank: 1498, L2-norm:0.0028418228030204773, L0.5-norm:0.002087831497192383
+Coefficient of Variation (CV): 0.6404258608818054
+rank is:8
+model.layers.14.mlp.down_proj.weight: Rank: 1, L2-norm:0.003390685888007283, L0.5-norm:0.0025133194867521524
+Coefficient of Variation (CV): 0.6276066303253174
+rank is:8
+model.layers.14.mlp.gate_proj.weight: Rank: 1418, L2-norm:0.0035061200615018606, L0.5-norm:0.0025604970287531614
+Coefficient of Variation (CV): 0.6504958868026733
+rank is:8
+model.layers.14.mlp.up_proj.weight: Rank: 2558, L2-norm:0.003422838170081377, L0.5-norm:0.002534670289605856
+Coefficient of Variation (CV): 0.6287545561790466
+rank is:8
+model.layers.14.self_attn.k_proj.weight: Rank: 1087, L2-norm:0.004565614275634289, L0.5-norm:0.003150553908199072
+Coefficient of Variation (CV): 0.7269737124443054
+rank is:8
+model.layers.14.self_attn.o_proj.weight: Rank: 1, L2-norm:0.0027460118290036917, L0.5-norm:0.0020215590484440327
+Coefficient of Variation (CV): 0.6382876038551331
+rank is:8
+model.layers.14.self_attn.q_proj.weight: Rank: 1113, L2-norm:0.004464486613869667, L0.5-norm:0.003110756166279316
+Coefficient of Variation (CV): 0.7144501805305481
+rank is:8
+model.layers.14.self_attn.v_proj.weight: Rank: 1517, L2-norm:0.002789938822388649, L0.5-norm:0.0020541527774184942
+Coefficient of Variation (CV): 0.6374072432518005
+rank is:8
+model.layers.15.mlp.down_proj.weight: Rank: 1, L2-norm:0.0034065654035657644, L0.5-norm:0.0025249903555959463
+Coefficient of Variation (CV): 0.6277809739112854
+rank is:8
+model.layers.15.mlp.gate_proj.weight: Rank: 1731, L2-norm:0.003525026375427842, L0.5-norm:0.0025719013065099716
+Coefficient of Variation (CV): 0.6516728401184082
+rank is:8
+model.layers.15.mlp.up_proj.weight: Rank: 2463, L2-norm:0.0034420553129166365, L0.5-norm:0.00254780612885952
+Coefficient of Variation (CV): 0.6294522285461426
+rank is:8
+model.layers.15.self_attn.k_proj.weight: Rank: 1160, L2-norm:0.004572513047605753, L0.5-norm:0.00318124913610518
+Coefficient of Variation (CV): 0.7155898213386536
+rank is:8
+model.layers.15.self_attn.o_proj.weight: Rank: 1, L2-norm:0.0028489013202488422, L0.5-norm:0.0020959884859621525
+Coefficient of Variation (CV): 0.6392908692359924
+rank is:8
+model.layers.15.self_attn.q_proj.weight: Rank: 1115, L2-norm:0.004422991536557674, L0.5-norm:0.0031089927069842815
+Coefficient of Variation (CV): 0.7023779153823853
+rank is:8
+model.layers.15.self_attn.v_proj.weight: Rank: 1537, L2-norm:0.0029009580612182617, L0.5-norm:0.002138468436896801
+Coefficient of Variation (CV): 0.6353764533996582
+rank is:8
+model.layers.16.mlp.down_proj.weight: Rank: 1, L2-norm:0.0033991814125329256, L0.5-norm:0.002520157489925623
+Coefficient of Variation (CV): 0.6272885203361511
+rank is:8
+model.layers.16.mlp.gate_proj.weight: Rank: 1737, L2-norm:0.003545232815667987, L0.5-norm:0.0025912055280059576
+Coefficient of Variation (CV): 0.6492098569869995
+rank is:8
+model.layers.16.mlp.up_proj.weight: Rank: 2557, L2-norm:0.0034365360625088215, L0.5-norm:0.002545189345255494
+Coefficient of Variation (CV): 0.6285001039505005
+rank is:8
+model.layers.16.self_attn.k_proj.weight: Rank: 1079, L2-norm:0.004510826431214809, L0.5-norm:0.003113740822300315
+Coefficient of Variation (CV): 0.7263478636741638
+rank is:8
+model.layers.16.self_attn.o_proj.weight: Rank: 1, L2-norm:0.002975958166643977, L0.5-norm:0.002193370833992958
+Coefficient of Variation (CV): 0.6364918351173401
+rank is:8
+model.layers.16.self_attn.q_proj.weight: Rank: 925, L2-norm:0.00439242459833622, L0.5-norm:0.0030622929334640503
+Coefficient of Variation (CV): 0.714655876159668
+rank is:8
+model.layers.16.self_attn.v_proj.weight: Rank: 1529, L2-norm:0.0030228050891309977, L0.5-norm:0.002229674020782113
+Coefficient of Variation (CV): 0.6346248388290405
+rank is:8
+model.layers.17.mlp.down_proj.weight: Rank: 63, L2-norm:0.0033882015850394964, L0.5-norm:0.0025130799040198326
+Coefficient of Variation (CV): 0.6265367269515991
+rank is:8
+model.layers.17.mlp.gate_proj.weight: Rank: 2012, L2-norm:0.003578027943149209, L0.5-norm:0.002620042534545064
+Coefficient of Variation (CV): 0.6462591886520386
+rank is:8
+model.layers.17.mlp.up_proj.weight: Rank: 2564, L2-norm:0.0034223543480038643, L0.5-norm:0.0025366370100528
+Coefficient of Variation (CV): 0.6273729205131531
+rank is:8
+model.layers.17.self_attn.k_proj.weight: Rank: 1020, L2-norm:0.004451282788068056, L0.5-norm:0.003112389473244548
+Coefficient of Variation (CV): 0.7090107798576355
+rank is:8
+model.layers.17.self_attn.o_proj.weight: Rank: 1, L2-norm:0.002979627111926675, L0.5-norm:0.0021974644623696804
+Coefficient of Variation (CV): 0.635845422744751
+rank is:8
+model.layers.17.self_attn.q_proj.weight: Rank: 1004, L2-norm:0.004346676170825958, L0.5-norm:0.0030663777142763138
+Coefficient of Variation (CV): 0.6973910927772522
+rank is:8
+model.layers.17.self_attn.v_proj.weight: Rank: 1553, L2-norm:0.0030124520417302847, L0.5-norm:0.002226438606157899
+Coefficient of Variation (CV): 0.6316860914230347
+rank is:8
+model.layers.18.mlp.down_proj.weight: Rank: 93, L2-norm:0.0033830220345407724, L0.5-norm:0.002509577199816704
+Coefficient of Variation (CV): 0.6264156103134155
+rank is:8
+model.layers.18.mlp.gate_proj.weight: Rank: 2044, L2-norm:0.003610453801229596, L0.5-norm:0.002645921427756548
+Coefficient of Variation (CV): 0.6450662016868591
+rank is:8
+model.layers.18.mlp.up_proj.weight: Rank: 2572, L2-norm:0.0034123477526009083, L0.5-norm:0.002530671190470457
+Coefficient of Variation (CV): 0.6265673637390137
+rank is:8

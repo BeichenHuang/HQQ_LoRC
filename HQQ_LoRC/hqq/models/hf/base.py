@@ -21,8 +21,7 @@ class BaseHQQHFModel(BaseHQQModel):
 
         print(cls.get_config_file(save_dir))
         config = transformers.AutoConfig.from_pretrained(
-            #cls.get_config_file(save_dir)
-            "deepseek-ai/deepseek-moe-16b-base" 
+            "deepseek-ai/deepseek-moe-16b-base" if "deepseek" in save_dir else cls.get_config_file(save_dir), trust_remote_code=True
         )
 
         auto_class = transformers.AutoModel
@@ -33,7 +32,7 @@ class BaseHQQHFModel(BaseHQQModel):
             auto_class = transformers.AutoModelForCausalLM
 
         with init_empty_weights():
-            model = auto_class.from_config(config, **model_kwargs)
+            model = auto_class.from_config(config, **model_kwargs, trust_remote_code=True)
 
         return model
 
