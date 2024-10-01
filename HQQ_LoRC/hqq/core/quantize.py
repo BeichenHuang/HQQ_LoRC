@@ -9,6 +9,7 @@ from typing import Union
 from .utils import is_divisible, encode_safetensor_type, decode_safetensor_type
 from .optimize import optimize_weights_proximal
 from .bitpack import BitPack
+from safetensors import safe_open
 
 _META_TYPE = {
     "scale": torch.Tensor,
@@ -384,6 +385,7 @@ class HQQLinear(nn.Module):
         compute_dtype: torch.dtype = float16,
         device: str = "cuda",
         initialize: bool = True,
+        lorc_path = None
     ):
         super().__init__()
         self.ready = False
@@ -410,14 +412,15 @@ class HQQLinear(nn.Module):
 
         self.U = None
         self.V = None
-        self.name = None
+        if linear_layer is not None:
+            self.name = linear_layer.name
 
         if initialize:
-            self.initialize()
+            self.initialize(lorc_path=lorc_path)
 
-    def initialize(self):
+    def initialize(self, lorc_path = None):
         if self.linear_layer is not None:
-            self.quantize(self.linear_layer.weight.data, **self.quant_config)
+            self.quantize(self.linear_layer.weight.data, lorc_path=lorc_path, **self.quant_config)
             self.bias = (
                 None
                 if (self.linear_layer.bias is None)
@@ -717,17 +720,35 @@ class HQQLinear(nn.Module):
         # Set in_features/out_features
         self.in_features, self.out_features = self.meta["shape"][::-1]
 
+    def UV_int8_dequantize(self,LoRC_weight_path,UV,layer_name):
+            with safe_open(f"{LoRC_weight_path}/{UV}_int8_scale.safetensors", framework="pt", device="cuda") as f:
+                scale = f.get_tensor(layer_name)
+            with safe_open(f"{LoRC_weight_path}/{UV}_int8_zero.safetensors", framework="pt", device="cuda") as f:
+                zero = f.get_tensor(layer_name)
+            with safe_open(f"{LoRC_weight_path}/{UV}_int8_weight.safetensors", framework="pt", device="cuda") as f:
+                weight = f.get_tensor(layer_name)
+            dequantized_weight = (weight - zero) / scale #dequantize
+            return dequantized_weight.half()
+
     def quantize(
         self,
         W: Tensor,
         weight_quant_params: dict,
         scale_quant_params: dict,
         zero_quant_params: dict,
+        lorc_path = None,
     ) -> None:
+        
         quant_scale = scale_quant_params is not None
         quant_zero = zero_quant_params is not None
 
         self.in_features, self.out_features = W.t().shape
+
+        if lorc_path is not None:
+            # print(f"adding low rank to {self.name} ..")
+            U = self.UV_int8_dequantize(lorc_path,'U',self.name).to(self.device)
+            V = self.UV_int8_dequantize(lorc_path,'V',self.name).to(self.device)
+            W = W.to(self.device) - (U @ V)
 
         # Quantize
         W_q, meta = Quantizer.quantize(

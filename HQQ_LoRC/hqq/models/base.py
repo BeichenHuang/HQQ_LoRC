@@ -269,6 +269,7 @@ class BaseHQQModel:
         quant_config: dict,
         compute_dtype: torch.dtype = float16,
         device: Union[str, list, dict] = "cuda",
+        lorc_path = None,
     ):
         # Check if the model was already quantized
         if getattr(model, "hqq_quantized", False):
@@ -358,6 +359,7 @@ class BaseHQQModel:
                     quant_config,
                     compute_dtype=compute_dtype,
                     device=current_device,
+                    lorc_path = lorc_path
                 )
             else:
                 out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
@@ -601,8 +603,21 @@ class BaseHQQModel:
                 for name, module in model.named_modules():      
                     if type(module) == HQQLinear:             
                         # error_list = ['mlp']
-                        lora_list = ['q_proj', 'k_proj', 'mlp']
+                        lora_list = ['o_proj']
                         if any(key in name for key in lora_list) or not low_rank_only:
+                            parts = name.split('.')
+                            if len(parts) > 2 and parts[1] == 'layers':
+                                # print(name)
+                                try:
+                                    layer_idx = int(parts[2])
+                                    if layer_idx > 100:
+                                        continue
+                                except ValueError:
+                                    continue
+                            try:
+                                UV_int8_dequantize(LoRC_weight_path,'U',name)
+                            except:
+                                continue
                             module.U = UV_int8_dequantize(LoRC_weight_path,'U',name)    
                             module.V = UV_int8_dequantize(LoRC_weight_path,'V',name)
                             module.name = name

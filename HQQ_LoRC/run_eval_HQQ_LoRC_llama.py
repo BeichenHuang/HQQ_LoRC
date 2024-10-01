@@ -14,25 +14,26 @@ import argparse
 
 model_id       = "meta-llama/Llama-2-7b-hf" 
 device         = 'cuda:0'
-model_path     = '/u/yyuan6/hqq_lorc/llama/llama-3bit-quantized' 
+# model_path     = '/scratch/bcjw/yyuan6/hqq_lorc/llama/llama-3bit-quantized' 
 
 
 def main():
     parser = argparse.ArgumentParser(description="HQQ_LoRC")
-    parser.add_argument('--Error_path', type=str, help="Error_path")
+    parser.add_argument('--model_path',type = str, nargs='?',default=False)
+    parser.add_argument('--error_path', type=str, help="Error_path")
     parser.add_argument('--LoRC_dtype', type=str, default ='int8', help="LoRC_dtype")
     parser.add_argument('--exp_rank', type=int, help="exp_rank")
     parser.add_argument('--attn_rank', type=int, help="attn_rank")
     parser.add_argument('--low_rank_only',type = bool, nargs='?',default=False)
 
     args = parser.parse_args()
-    print(f"model path: {model_path}")
-    print(f"Error_path: {args.Error_path}")
+    print(f"model path: {args.model_path}")
+    print(f"Error_path: {args.error_path}")
     print(f"LoRC_dtype: {args.LoRC_dtype}")
     print(f"exp_rank: {args.exp_rank}")
     print(f"attn_rank: {args.attn_rank}")
     print(f"low_rank_only: {args.low_rank_only}")
-    model = AutoHQQHFModel.from_quantized(model_path,LoRC_weight_path=args.Error_path,LoRC_dtype = args.LoRC_dtype,exp_rank=args.exp_rank,attn_rank=args.attn_rank,low_rank_only=args.low_rank_only)
+    model = AutoHQQHFModel.from_quantized(args.model_path,LoRC_weight_path=args.error_path,LoRC_dtype = args.LoRC_dtype,exp_rank=args.exp_rank,attn_rank=args.attn_rank,low_rank_only=args.low_rank_only).to(device)
     tokenizer    = AutoTokenizer.from_pretrained(model_id)
     if tokenizer.pad_token is None:
         tokenizer.pad_token =tokenizer.eos_token
@@ -49,7 +50,7 @@ def main():
     # print("finish warm up")
 
     begin = time.time()
-    eval_perplexity(model,tokenizer,f"{model_path}/wikitext2_perplexity_result.pickle",save_flag=0)
+    eval_perplexity(model,tokenizer,f"{args.model_path}/wikitext2_perplexity_result.pickle",save_flag=0)
     end = time.time()
     print(f"taking {end - begin}")
     return
