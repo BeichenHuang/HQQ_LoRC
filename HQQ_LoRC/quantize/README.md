@@ -5,10 +5,13 @@
 2. The first low rank composition needs to be done manually, using `Error_gen.py` as before. Assume saving this to /path/to/uv-all256.
 
 3. Do iterative optimization.
-``python3 llama_3bit_iterative.py --fp16_model_path /path/to/llama-3bit-fp16 --quant_model_path /path/to/llama-3bit-quantized --lorc_path /path/to/uv-all256 --iteration 5 --exp_rank 256 --attn_rank 256``
+```
+python3 llama_3bit_iterative.py --fp16_model_path /path/to/llama-3bit-fp16 --quant_model_path /path/to/llama-3bit-quantized --lorc_path /path/to/uv-all256 --iteration 5 --exp_rank 256 --attn_rank 256
+```
 Use the final iteration as the flag. The existing iters will be skipped.
 
 An example:
+```
 (env310) ➜  quantize git:(deepseek) ✗ python3 llama_3bit_iterative.py --quant_model_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/llama-3bit-quantized --lorc_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/all256 --iteration 7 --fp16_model_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/models--meta-llama--Llama-2-7b-hf/snapshots/01c7f73d771dfac7d292323805ebc428287df4f9
 Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:00<00:00,  4.47it/s]
 /work/hdd/bcjw/yyuan6/hqq_lorc/llama/llama-3bit-quantized-iterate1 exists. Skip.
@@ -38,14 +41,16 @@ Processing file 00001: 100%|█████████████████�
 Processing file 00002: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 82/82 [01:09<00:00,  1.18it/s]
 Files Processing: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [04:40<00:00, 140.28s/it]
 >>int8 saved to /work/hdd/bcjw/yyuan6/hqq_lorc/llama/all256-iterate7<<
-
+```
 # evaluation
 Use the same evaluation script as before, with iterated `model_path` and `error_path`.
-``python3 run_eval_HQQ_LoRC_llama.py --model_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/llama-3bit-quantized-iterate7 --error_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/all256-iterate7 --exp_rank 256 --attn_rank 256``
-
+```
+python3 run_eval_HQQ_LoRC_llama.py --model_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/llama-3bit-quantized-iterate7 --error_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/all256-iterate7 --exp_rank 256 --attn_rank 256
+```
 `quantize_lorc_eval` is used to evaluate the error matrix norms for each parameter.
-``python3 quantize_lorc_eval.py --model_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/llama-3bit-quantized-iterate5 --lorc_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/all256-iterate5``
-
+```
+python3 quantize_lorc_eval.py --model_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/llama-3bit-quantized-iterate5 --lorc_path /work/hdd/bcjw/yyuan6/hqq_lorc/llama/all256-iterate5
+```
 # apply to another model
 
 1. change `model_id`.
