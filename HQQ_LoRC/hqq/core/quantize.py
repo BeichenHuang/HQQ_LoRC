@@ -30,6 +30,15 @@ _META_TYPE = {
     "round_zero": bool,
 }
 
+def full_to_int8(tensor_in):
+    max_val, _ = torch.max(tensor_in, dim=1, keepdim=True)
+    min_val, _ = torch.min(tensor_in, dim=1, keepdim=True)
+    max_min = max_val - min_val
+    max_min[max_min==0] = 255  #deal with the case max = min
+    scale = 255 / max_min
+    zero = - torch.round(scale * min_val) - 128  
+    tensor_int8 = torch.round(tensor_in * scale + zero).to(torch.int8)
+    return  scale,zero,tensor_int8
 
 # Main HQQ Quantizer
 class Quantizer:
@@ -385,7 +394,10 @@ class HQQLinear(nn.Module):
         compute_dtype: torch.dtype = float16,
         device: str = "cuda",
         initialize: bool = True,
-        lorc_path = None
+        lorc_path = None,
+        iters: int = 0,
+        rank: int = 0,
+        lorc_dtype = 'int8'
     ):
         super().__init__()
         self.ready = False
@@ -400,6 +412,9 @@ class HQQLinear(nn.Module):
             if (self.quant_config is not None)
             else None
         )
+        self.iters = iters
+        self.rank = rank
+        self.lorc_dtype = lorc_dtype
 
         self.set_backend(HQQLinear.backend)
 
@@ -416,11 +431,16 @@ class HQQLinear(nn.Module):
             self.name = linear_layer.name
 
         if initialize:
-            self.initialize(lorc_path=lorc_path)
+            self.UV_quantized = self.initialize(lorc_path=lorc_path)
+
+    def pop_UV_quantized(self):
+        UV_quantized = self.UV_quantized
+        del self.UV_quantized
+        return UV_quantized
 
     def initialize(self, lorc_path = None):
         if self.linear_layer is not None:
-            self.quantize(self.linear_layer.weight.data, lorc_path=lorc_path, **self.quant_config)
+            UV_quantized = self.quantize(self.linear_layer.weight.data, lorc_path=lorc_path, **self.quant_config)
             self.bias = (
                 None
                 if (self.linear_layer.bias is None)
@@ -743,21 +763,46 @@ class HQQLinear(nn.Module):
         quant_zero = zero_quant_params is not None
 
         self.in_features, self.out_features = W.t().shape
+         
+        U = None
+        V = None
+        W_unquant = W.to(self.device)
+        W_q = None
+        UV_quantized = None
 
-        if lorc_path is not None:
-            # print(f"adding low rank to {self.name} ..")
-            U = self.UV_int8_dequantize(lorc_path,'U',self.name).to(self.device)
-            V = self.UV_int8_dequantize(lorc_path,'V',self.name).to(self.device)
-            W = W.to(self.device) - (U @ V)
+        iters = self.iters
+        rank = self.rank
+        lorc_dtype = self.lorc_dtype
 
-        # Quantize
-        W_q, meta = Quantizer.quantize(
-            W,
-            device=self.device,
-            compute_dtype=self.compute_dtype,
-            **weight_quant_params,
-        )
-        meta.update({"quant_scale": quant_scale, "quant_zero": quant_zero})
+        for i in range(0, iters + 1):
+            if i > 0:
+                print(f"adding low rank to {self.name} ..")
+                # U = self.UV_int8_dequantize(lorc_path,'U',self.name).to(self.device)
+                # V = self.UV_int8_dequantize(lorc_path,'V',self.name).to(self.device)
+                W = W_unquant.to(self.device) - (U @ V)
+
+            # Quantize
+            print(f"quantize {self.name} to {weight_quant_params['nbits']} bits, iter = {i}, rank = {rank}")
+            W_q, meta = Quantizer.quantize(
+                W,
+                device=self.device,
+                compute_dtype=self.compute_dtype,
+                **weight_quant_params,
+            )
+            meta.update({"quant_scale": quant_scale, "quant_zero": quant_zero})
+
+            W_q_dequant = Quantizer.dequantize(W_q, meta).to(self.device)
+
+            U_svd, S, V_svd = torch.linalg.svd(W_unquant.float() - W_q_dequant.float(), full_matrices=False)
+            S = torch.diag(S)
+            U = (U_svd[:,:rank] @ torch.sqrt(S[:rank,:rank])).to(self.device) # calculate the U_h and V_h according to rank
+            V = (torch.sqrt(S[:rank,:rank]) @ V_svd[:rank,:]).to(self.device)
+
+        if lorc_dtype == 'int8':
+            UV_quantized = (full_to_int8(U), full_to_int8(V))
+            self.UV_quantized = UV_quantized
+        else:
+            raise NotImplementedError
 
         if meta["quant_zero"]:
             meta["zero_q"], meta["meta_zero"] = Quantizer.quantize(
@@ -783,6 +828,7 @@ class HQQLinear(nn.Module):
         self.meta = meta
         self.cuda(self.device)
         self.ready = True
+
 
     def unpack(self, reshape=False, dtype=None):
         if self.ready is False:

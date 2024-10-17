@@ -267,17 +267,34 @@ class BaseHQQModel:
         cls,
         model,
         quant_config: dict,
+        mixed_precision: bool = False,
+        expert_tags = None,
+        experts_quant_config = None,
         compute_dtype: torch.dtype = float16,
         device: Union[str, list, dict] = "cuda",
         lorc_path = None,
+        iters: int = 0,
+        ranks: dict = {},
+        lorc_dtype = 'int8'
     ):
-        # Check if the model was already quantized
-        if getattr(model, "hqq_quantized", False):
-            print("Model was already quantized")
-            return
+        # # Check if the model was already quantized
+        # if getattr(model, "hqq_quantized", False):
+        #     print("Model was already quantized")
+        #     return
 
         # Set linear tags automatically
         cls.setup_model(model)
+
+        assert (not mixed_precision) or (mixed_precision and (experts_quant_config is not None) and (expert_tags is not None))
+        if mixed_precision:
+            print("using mixed precision quantization.")
+            patch_params = {}
+            for k in model.linear_tags:
+                if k in expert_tags:
+                    patch_params[k] = experts_quant_config
+                else:
+                    patch_params[k] = quant_config
+            print(patch_params)
 
         # Use the same quantization config for all linear layers. Use None to skip quantizing a specfic layer.
         if True in [(key in model.linear_tags) for key in quant_config.keys()]:
@@ -359,7 +376,9 @@ class BaseHQQModel:
                     quant_config,
                     compute_dtype=compute_dtype,
                     device=current_device,
-                    lorc_path = lorc_path
+                    lorc_path = lorc_path,
+                    iters = iters,
+                    rank = next((value for key, value in ranks.items() if key in linear_layer.name), None)
                 )
             else:
                 out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
@@ -373,6 +392,43 @@ class BaseHQQModel:
             return layer.to(device=current_device, dtype=compute_dtype)
 
         cls.patch_model(model, _patch_other, _patch_linear, patch_params)
+
+        all_U_h_q_weight = {}
+        all_U_h_q_scale = {}
+        all_U_h_q_zero = {}
+        all_V_h_q_weight = {}
+        all_V_h_q_scale = {}
+        all_V_h_q_zero = {}
+
+        for name, module in model.named_modules():
+            print(name, module)
+            if isinstance(module, HQQLinear):
+                UV_quantized = module.pop_UV_quantized()
+                if UV_quantized is not None:
+                    print(f"{name}'s UV saved")
+                    (U_h_scale, U_h_zero, U_h_q), (V_h_scale,V_h_zero,V_h_q) = UV_quantized
+                    all_U_h_q_weight[name] = U_h_q.to('cpu')
+                    all_U_h_q_scale[name] = U_h_scale.to('cpu')
+                
+                    all_V_h_q_weight[name] = V_h_q.to('cpu')
+                    all_V_h_q_scale[name] = V_h_scale.to('cpu')
+                
+                    if lorc_dtype != 'int3_symm':
+                        all_U_h_q_zero[name] = U_h_zero.to('cpu')
+                        all_V_h_q_zero[name] = V_h_zero.to('cpu')
+
+        from safetensors.torch import save_file
+        os.makedirs(f"{lorc_path}-iter{iters}", exist_ok = True)
+        if lorc_dtype == 'int8':
+            save_file(all_U_h_q_weight, f"{lorc_path}-iter{iters}/U_int8_weight.safetensors")
+            save_file(all_U_h_q_scale, f"{lorc_path}-iter{iters}/U_int8_scale.safetensors")
+            save_file(all_U_h_q_zero, f"{lorc_path}-iter{iters}/U_int8_zero.safetensors")
+            save_file(all_V_h_q_weight, f"{lorc_path}-iter{iters}/V_int8_weight.safetensors")
+            save_file(all_V_h_q_scale, f"{lorc_path}-iter{iters}/V_int8_scale.safetensors")
+            save_file(all_V_h_q_zero, f"{lorc_path}-iter{iters}/V_int8_zero.safetensors")
+        else:
+            raise NotImplementedError
+        print(f">>{lorc_dtype} saved to {lorc_path}-iter{iters}<<")
 
         # Insert device switcher
         if num_devices > 1:
@@ -475,6 +531,8 @@ class BaseHQQModel:
         exp_rank = None,
         attn_rank = None,
         low_rank_only = False,
+        lorc_tags = None,
+        lorc_save_dir = None,
         **kwargs,
     ):
         # Get directory path
@@ -492,7 +550,16 @@ class BaseHQQModel:
         # Load weights
         try:
             weights = cls.load_weights(save_dir)
-            # print(weights.keys())
+            if lorc_save_dir is not None:
+                print(f"using partial lorc weights. tags are {lorc_tags}")
+                lorc_weights = cls.load_weights(lorc_save_dir)
+                for weight_name in weights:
+                    if any(lorc_tag in weight_name for lorc_tag in lorc_tags):
+                        weights[weight_name] = lorc_weights[weight_name]
+                        print(f"{weight_name} uses lorc")
+                del lorc_weights
+            print(weights.keys())
+
         except Exception:
             print("Failed to load the weights")
             raise FileNotFoundError
@@ -604,6 +671,9 @@ class BaseHQQModel:
                     if type(module) == HQQLinear:             
                         # error_list = ['mlp']
                         lora_list = ['o_proj']
+                        if lorc_tags is not None and all(lorc_tag not in name for lorc_tag in lorc_tags):
+                            print(f"skipping {name}")
+                            continue
                         if any(key in name for key in lora_list) or not low_rank_only:
                             parts = name.split('.')
                             if len(parts) > 2 and parts[1] == 'layers':
