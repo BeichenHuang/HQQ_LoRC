@@ -431,7 +431,7 @@ class HQQLinear(nn.Module):
             self.name = linear_layer.name
 
         if initialize:
-            self.UV_quantized = self.initialize(lorc_path=lorc_path)
+            self.initialize(lorc_path=lorc_path)
 
     def pop_UV_quantized(self):
         UV_quantized = self.UV_quantized
@@ -440,7 +440,7 @@ class HQQLinear(nn.Module):
 
     def initialize(self, lorc_path = None):
         if self.linear_layer is not None:
-            UV_quantized = self.quantize(self.linear_layer.weight.data, lorc_path=lorc_path, **self.quant_config)
+            self.quantize(self.linear_layer.weight.data, lorc_path=lorc_path, **self.quant_config)
             self.bias = (
                 None
                 if (self.linear_layer.bias is None)

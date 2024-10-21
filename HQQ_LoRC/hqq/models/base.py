@@ -404,6 +404,7 @@ class BaseHQQModel:
             print(name, module)
             if isinstance(module, HQQLinear):
                 UV_quantized = module.pop_UV_quantized()
+                print(UV_quantized)
                 if UV_quantized is not None:
                     print(f"{name}'s UV saved")
                     (U_h_scale, U_h_zero, U_h_q), (V_h_scale,V_h_zero,V_h_q) = UV_quantized
