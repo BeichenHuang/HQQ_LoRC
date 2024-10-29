@@ -5,6 +5,7 @@ from torch import uint8, int32, float16, nn, Tensor
 import copy
 from enum import Enum
 from typing import Union
+import numpy as np            
 
 from .utils import is_divisible, encode_safetensor_type, decode_safetensor_type
 from .optimize import optimize_weights_proximal
@@ -39,6 +40,41 @@ def full_to_int8(tensor_in):
     zero = - torch.round(scale * min_val) - 128  
     tensor_int8 = torch.round(tensor_in * scale + zero).to(torch.int8)
     return  scale,zero,tensor_int8
+
+def pack_3bit_32(W_q_in: Tensor) -> Tensor:
+    W_q = torch.zeros(
+        [int(10 * np.ceil(W_q_in.shape[0] / 10.0)), W_q_in.shape[1]],
+        device="cuda",
+        dtype=int32,
+    )
+    W_q[: len(W_q_in)] = W_q_in
+    _step = int(len(W_q) / 10)
+
+    W_q = (
+        (W_q[:_step] << 27)
+        | (W_q[1 * _step : 2 * _step] << 24)
+        | (W_q[2 * _step : 3 * _step] << 21)
+        | (W_q[3 * _step : 4 * _step] << 18)
+        | (W_q[4 * _step : 5 * _step] << 15)
+        | (W_q[5 * _step : 6 * _step] << 12)
+        | (W_q[6 * _step : 7 * _step] << 9)
+        | (W_q[7 * _step : 8 * _step] << 6)
+        | (W_q[8 * _step : 9 * _step] << 3)
+        | (W_q[9 * _step : 10 * _step])
+    )
+    return W_q
+
+def full_to_int3_symmetric(tensor_in, LoRC_group_size):
+    group_size = LoRC_group_size
+    tensor_in = tensor_in.reshape(-1,group_size)
+    scale, _ = torch.max(tensor_in, dim=1, keepdim=True)
+    tensor_int8 = torch.round(tensor_in * 7/(2*scale) ) + 4
+    tensor_int8 = torch.clamp(tensor_int8,0,7).to(torch.int32)
+    tensor_packed = pack_3bit_32(tensor_int8)
+    # print(f"scale:{scale.shape}")
+    # print(f"tensor_packed:{tensor_packed.shape}")
+    # tensor_packed.shape()
+    return  (scale, tensor_packed)
 
 # Main HQQ Quantizer
 class Quantizer:
@@ -142,6 +178,7 @@ class Quantizer:
 
         # Fine-tune weights
         if optimize:
+            print("TEST")
             W_q, scale, zero = Quantizer.optimize_weights(
                 tensor=W,
                 scale=scale,
@@ -427,16 +464,21 @@ class HQQLinear(nn.Module):
 
         self.U = None
         self.V = None
+
         if linear_layer is not None:
+            self.orig_shape = self.linear_layer.weight.data.shape
             self.name = linear_layer.name
 
         if initialize:
             self.initialize(lorc_path=lorc_path)
 
     def pop_UV_quantized(self):
-        UV_quantized = self.UV_quantized
-        del self.UV_quantized
-        return UV_quantized
+        if hasattr(self, 'UV_quantized'):
+            UV_quantized = self.UV_quantized
+            del UV_quantized
+            return self.UV_quantized
+        else:
+            return None
 
     def initialize(self, lorc_path = None):
         if self.linear_layer is not None:
@@ -776,7 +818,6 @@ class HQQLinear(nn.Module):
 
         for i in range(0, iters + 1):
             if i > 0:
-                print(f"adding low rank to {self.name} ..")
                 # U = self.UV_int8_dequantize(lorc_path,'U',self.name).to(self.device)
                 # V = self.UV_int8_dequantize(lorc_path,'V',self.name).to(self.device)
                 W = W_unquant.to(self.device) - (U @ V)
@@ -791,18 +832,31 @@ class HQQLinear(nn.Module):
             )
             meta.update({"quant_scale": quant_scale, "quant_zero": quant_zero})
 
+            if rank == 0:
+                 break
             W_q_dequant = Quantizer.dequantize(W_q, meta).to(self.device)
 
-            U_svd, S, V_svd = torch.linalg.svd(W_unquant.float() - W_q_dequant.float(), full_matrices=False)
+            # U_svd, S, V_svd = torch.linalg.svd(W_unquant.float() - W_q_dequant.float(), full_matrices=False)
+            # S = torch.diag(S)
+            # U = (U_svd[:,:rank] @ torch.sqrt(S[:rank,:rank])).to(self.device) # calculate the U_h and V_h according to rank
+            # V = (torch.sqrt(S[:rank,:rank]) @ V_svd[:rank,:]).to(self.device)
+            U_svd, S, V_svd = torch.svd_lowrank(W_unquant.float() - W_q_dequant.float(), q=rank)
             S = torch.diag(S)
-            U = (U_svd[:,:rank] @ torch.sqrt(S[:rank,:rank])).to(self.device) # calculate the U_h and V_h according to rank
-            V = (torch.sqrt(S[:rank,:rank]) @ V_svd[:rank,:]).to(self.device)
+            U = (U_svd @ torch.sqrt(S)).to(self.device)
+            V = (torch.sqrt(S) @ V_svd.T).to(self.device)
 
-        if lorc_dtype == 'int8':
-            UV_quantized = (full_to_int8(U), full_to_int8(V))
-            self.UV_quantized = UV_quantized
-        else:
-            raise NotImplementedError
+            Error = W_unquant - W_q_dequant - U@V
+            print(f"iter {i}, norm={torch.norm(Error,p='fro')}")
+
+        if rank > 0:
+            if lorc_dtype == 'int8':
+                UV_quantized = (full_to_int8(U), full_to_int8(V))
+                self.UV_quantized = UV_quantized
+            elif lorc_dtype == 'int3_symm':
+                UV_quantized = ((full_to_int3_symmetric(U, 64)), (full_to_int3_symmetric(V, 64)))
+                self.UV_quantized = UV_quantized
+            else:
+                raise NotImplementedError
 
         if meta["quant_zero"]:
             meta["zero_q"], meta["meta_zero"] = Quantizer.quantize(

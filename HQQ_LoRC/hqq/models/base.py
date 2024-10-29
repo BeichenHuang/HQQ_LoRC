@@ -18,6 +18,7 @@ from ..core.peft import PeftUtils, _HQQ_LORA_CLASSES
 from ..backends.torchao import HQQLinearTorchWeightOnlynt4
 
 from safetensors import safe_open
+from safetensors.torch import save_file
 import re
 from torch import uint8, int32, Tensor
 import pickle
@@ -274,6 +275,7 @@ class BaseHQQModel:
         device: Union[str, list, dict] = "cuda",
         lorc_path = None,
         iters: int = 0,
+        iter_expert_only: bool = False,
         ranks: dict = {},
         lorc_dtype = 'int8'
     ):
@@ -286,6 +288,8 @@ class BaseHQQModel:
         cls.setup_model(model)
 
         assert (not mixed_precision) or (mixed_precision and (experts_quant_config is not None) and (expert_tags is not None))
+        assert lorc_dtype in ['int8', 'int3_symm'], f"LoRC quantization [{lorc_dtype}] is not supported"
+
         if mixed_precision:
             print("using mixed precision quantization.")
             patch_params = {}
@@ -377,8 +381,9 @@ class BaseHQQModel:
                     compute_dtype=compute_dtype,
                     device=current_device,
                     lorc_path = lorc_path,
-                    iters = iters,
-                    rank = next((value for key, value in ranks.items() if key in linear_layer.name), None)
+                    iters = (iters if ((not iter_expert_only) or ('mlp.experts' in linear_layer.name)) else 0),
+                    rank = next((value for key, value in ranks.items() if key in linear_layer.name), None),
+                    lorc_dtype=lorc_dtype
                 )
             else:
                 out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
@@ -401,13 +406,14 @@ class BaseHQQModel:
         all_V_h_q_zero = {}
 
         for name, module in model.named_modules():
-            print(name, module)
             if isinstance(module, HQQLinear):
                 UV_quantized = module.pop_UV_quantized()
-                print(UV_quantized)
                 if UV_quantized is not None:
-                    print(f"{name}'s UV saved")
-                    (U_h_scale, U_h_zero, U_h_q), (V_h_scale,V_h_zero,V_h_q) = UV_quantized
+                    print(f"{name}'s UV saved, using type {lorc_dtype}")
+                    if lorc_dtype == 'int3_symm':
+                        (U_h_scale, U_h_q), (V_h_scale, V_h_q) = UV_quantized
+                    else:
+                        (U_h_scale, U_h_zero, U_h_q), (V_h_scale, V_h_zero, V_h_q) = UV_quantized
                     all_U_h_q_weight[name] = U_h_q.to('cpu')
                     all_U_h_q_scale[name] = U_h_scale.to('cpu')
                 
@@ -418,17 +424,14 @@ class BaseHQQModel:
                         all_U_h_q_zero[name] = U_h_zero.to('cpu')
                         all_V_h_q_zero[name] = V_h_zero.to('cpu')
 
-        from safetensors.torch import save_file
         os.makedirs(f"{lorc_path}-iter{iters}", exist_ok = True)
-        if lorc_dtype == 'int8':
-            save_file(all_U_h_q_weight, f"{lorc_path}-iter{iters}/U_int8_weight.safetensors")
-            save_file(all_U_h_q_scale, f"{lorc_path}-iter{iters}/U_int8_scale.safetensors")
-            save_file(all_U_h_q_zero, f"{lorc_path}-iter{iters}/U_int8_zero.safetensors")
-            save_file(all_V_h_q_weight, f"{lorc_path}-iter{iters}/V_int8_weight.safetensors")
-            save_file(all_V_h_q_scale, f"{lorc_path}-iter{iters}/V_int8_scale.safetensors")
-            save_file(all_V_h_q_zero, f"{lorc_path}-iter{iters}/V_int8_zero.safetensors")
-        else:
-            raise NotImplementedError
+        save_file(all_U_h_q_weight, f"{lorc_path}-iter{iters}/U_{lorc_dtype}_weight.safetensors")
+        save_file(all_U_h_q_scale, f"{lorc_path}-iter{iters}/U_{lorc_dtype}_scale.safetensors")
+        save_file(all_V_h_q_weight, f"{lorc_path}-iter{iters}/V_{lorc_dtype}_weight.safetensors")
+        save_file(all_V_h_q_scale, f"{lorc_path}-iter{iters}/V_{lorc_dtype}_scale.safetensors")
+        if lorc_dtype != 'int3_symm':
+            save_file(all_U_h_q_zero, f"{lorc_path}-iter{iters}/U_{lorc_dtype}_zero.safetensors")
+            save_file(all_V_h_q_zero, f"{lorc_path}-iter{iters}/V_{lorc_dtype}_zero.safetensors")
         print(f">>{lorc_dtype} saved to {lorc_path}-iter{iters}<<")
 
         # Insert device switcher
@@ -534,6 +537,7 @@ class BaseHQQModel:
         low_rank_only = False,
         lorc_tags = None,
         lorc_save_dir = None,
+        ranks = None,
         **kwargs,
     ):
         # Get directory path
@@ -623,33 +627,86 @@ class BaseHQQModel:
             tmp[8 * _step : 9 * _step] = (W_q & 0b00000000000000000000000000111000) >> 3
             tmp[9 * _step : 10 * _step] = W_q & 0b00000000000000000000000000000111
             return tmp
-        
-        def UV_int3_dequantize(LoRC_weight_path,layer_name,orig_shape,UV,exp_rank,attn_rank,symm_flag):
-            if symm_flag:
+
+
+        def UV_int3_dequantize(LoRC_weight_path, layer_name, orig_shape, UV, rank, LoRC_group_size,lorc_dtype):
+            assert lorc_dtype in ['int3', 'int3_symm']
+            if lorc_dtype == 'int3_symm':
                 zero = 4
-                with safe_open(f"{LoRC_weight_path}/{UV}_int3_symm_scale.safetensors", framework="pt", device="cuda") as f:
-                    scale = f.get_tensor(layer_name)
-                with safe_open(f"{LoRC_weight_path}/{UV}_int3_symm_weight.safetensors", framework="pt", device="cuda") as f:
-                    weight = unpack_3bit_32(f.get_tensor(layer_name))
             else:
                 with safe_open(f"{LoRC_weight_path}/{UV}_int3_zero.safetensors", framework="pt", device="cuda") as f:
                     zero = f.get_tensor(layer_name)
-                with safe_open(f"{LoRC_weight_path}/{UV}_int3_scale.safetensors", framework="pt", device="cuda") as f:
-                    scale = f.get_tensor(layer_name)
-                with safe_open(f"{LoRC_weight_path}/{UV}_int3_weight.safetensors", framework="pt", device="cuda") as f:
-                    weight = unpack_3bit_32(f.get_tensor(layer_name))
+            with safe_open(f"{LoRC_weight_path}/{UV}_{lorc_dtype}_scale.safetensors", framework="pt", device="cuda") as f:
+                scale = f.get_tensor(layer_name)
+            with safe_open(f"{LoRC_weight_path}/{UV}_{lorc_dtype}_weight.safetensors", framework="pt", device="cuda") as f:
+                weight = unpack_3bit_32(f.get_tensor(layer_name))
+
             if UV == 'U':
-                weight = weight[:orig_shape[0],:]
+                weight = weight[:int(orig_shape[0] * (rank / LoRC_group_size)),:]
             else:
-                if 'expert' in layer_name: rank = exp_rank
-                elif 'self_attn.k_proj' in layer_name or 'self_attn.v_proj' in layer_name : rank = attn_rank
-                elif 'self_attn.o_proj' in layer_name or 'self_attn.q_proj' in layer_name: rank = attn_rank
-                weight = weight[:rank,:]
-            if symm_flag:
+                weight = weight[:int(rank * orig_shape[1] / LoRC_group_size), :]
+
+            if lorc_dtype == 'int3_symm':
                 dequantized_weight = (weight - zero) * 2 * scale / 7
             else:
-                dequantized_weight = (weight - zero) / scale #dequantize
+                dequantized_weight = (weight - zero) / scale
+
+            if UV == 'U':
+                dequantized_weight = dequantized_weight.reshape(orig_shape[0], -1)
+            else:
+                dequantized_weight = dequantized_weight.reshape(-1, orig_shape[1])
+
             return dequantized_weight.half()    
+
+        def load_UV_int3(model, LoRC_weight_path, LoRC_group_size, ranks, lorc_dtype = 'int3'):
+                if LoRC_weight_path == None: 
+                    print("LoRC_weight_path is None. Not using LoRC.")
+                    return
+                if model.config.model_type == "deepseek": fname = '/work/hdd/bcjw/yyuan6/hqq_lorc/sizes/deepseek_weight_size.pkl'
+                elif model.config.model_type == "mixtral": fname = '/work/hdd/bcjw/yyuan6/hqq_lorc/sizes/mixtral_weight_size.pkl'
+                with open(fname, 'rb') as f:
+                    loaded_layer_info = pickle.load(f)
+                for name, module in model.named_modules():
+                    if type(module) == HQQLinear: 
+                        
+                        orig_shape = loaded_layer_info[name]
+                        #     # print(orig_shape)
+                        
+                        # orig_shape = module.orig_shape
+                        rank = next((value for key, value in ranks.items() if key in name), None)
+                        if rank > 0:
+                            module.U = UV_int3_dequantize(LoRC_weight_path, name, orig_shape, "U", rank, LoRC_group_size, lorc_dtype)
+                            module.V = UV_int3_dequantize(LoRC_weight_path, name, orig_shape, "V", rank, LoRC_group_size, lorc_dtype)
+                        module.name = name
+                del loaded_layer_info             
+        
+        # def UV_int3_dequantize(LoRC_weight_path, layer_name, orig_shape, UV, exp_rank, attn_rank, lorc_dtype):
+        #     assert lorc_dtype in 
+        #     if symm_flag:
+        #         zero = 4
+        #         with safe_open(f"{LoRC_weight_path}/{UV}_int3_symm_scale.safetensors", framework="pt", device="cuda") as f:
+        #             scale = f.get_tensor(layer_name)
+        #         with safe_open(f"{LoRC_weight_path}/{UV}_int3_symm_weight.safetensors", framework="pt", device="cuda") as f:
+        #             weight = unpack_3bit_32(f.get_tensor(layer_name))
+        #     else:
+        #         with safe_open(f"{LoRC_weight_path}/{UV}_int3_zero.safetensors", framework="pt", device="cuda") as f:
+        #             zero = f.get_tensor(layer_name)
+        #         with safe_open(f"{LoRC_weight_path}/{UV}_int3_scale.safetensors", framework="pt", device="cuda") as f:
+        #             scale = f.get_tensor(layer_name)
+        #         with safe_open(f"{LoRC_weight_path}/{UV}_int3_weight.safetensors", framework="pt", device="cuda") as f:
+        #             weight = unpack_3bit_32(f.get_tensor(layer_name))
+        #     if UV == 'U':
+        #         weight = weight[:orig_shape[0],:]
+        #     else:
+        #         if 'expert' in layer_name: rank = exp_rank
+        #         elif 'self_attn.k_proj' in layer_name or 'self_attn.v_proj' in layer_name : rank = attn_rank
+        #         elif 'self_attn.o_proj' in layer_name or 'self_attn.q_proj' in layer_name: rank = attn_rank
+        #         weight = weight[:rank,:]
+        #     if symm_flag:
+        #         dequantized_weight = (weight - zero) * 2 * scale / 7
+        #     else:
+        #         dequantized_weight = (weight - zero) / scale #dequantize
+        #     return dequantized_weight.half()    
             
         
         def UV_int8_dequantize(LoRC_weight_path,UV,layer_name):
@@ -695,35 +752,35 @@ class BaseHQQModel:
                             if low_rank_only:
                                 print(name)
 
-        def load_UV_int3(model,LoRC_weight_path,low_rank_only = False, symm_flag = False):
-                if LoRC_weight_path == None: 
-                    print("LoRC_weight_path wrong")
-                    return
+        # def load_UV_int3(model, LoRC_weight_path, low_rank_only = False, symm_flag = False):
+        #         if LoRC_weight_path == None: 
+        #             print("LoRC_weight_path wrong")
+        #             return
                 
-                for name, module in model.named_modules():
-                    if type(module) == HQQLinear: 
-                        if low_rank_only:
-                            if ("w1" in name) or ("w3" in name): continue
-                        with open('/u/bhuang4/MoE_quant/HQQ_LoRC/weight_size.pkl', 'rb') as f:
-                            loaded_layer_info = pickle.load(f)
-                            orig_shape = loaded_layer_info[name]
-                            del loaded_layer_info             
-                        module.U = UV_int3_dequantize(LoRC_weight_path,
-                                                      name,
-                                                      orig_shape,
-                                                      "U",
-                                                      exp_rank,
-                                                      attn_rank,
-                                                      symm_flag)
+        #         for name, module in model.named_modules():
+        #             if type(module) == HQQLinear: 
+        #                 if low_rank_only:
+        #                     if ("w1" in name) or ("w3" in name): continue
+        #                 with open('/u/bhuang4/MoE_quant/HQQ_LoRC/weight_size.pkl', 'rb') as f:
+        #                     loaded_layer_info = pickle.load(f)
+        #                     orig_shape = loaded_layer_info[name]
+        #                     del loaded_layer_info             
+        #                 module.U = UV_int3_dequantize(LoRC_weight_path,
+        #                                               name,
+        #                                               orig_shape,
+        #                                               "U",
+        #                                               exp_rank,
+        #                                               attn_rank,
+        #                                               symm_flag)
                         
-                        module.V = UV_int3_dequantize(LoRC_weight_path,
-                                                      name,
-                                                      orig_shape,
-                                                      "V",
-                                                      exp_rank,
-                                                      attn_rank,
-                                                      symm_flag)
-                        module.name = name
+        #                 module.V = UV_int3_dequantize(LoRC_weight_path,
+        #                                               name,
+        #                                               orig_shape,
+        #                                               "V",
+        #                                               exp_rank,
+        #                                               attn_rank,
+        #                                               symm_flag)
+        #                 module.name = name
 
         #load UV
         @torch.no_grad()
@@ -758,14 +815,14 @@ class BaseHQQModel:
         )
 
         #LoRC
+        assert lorc_save_dir is None or ranks is not None 
+
         if LoRC_dtype == "half":
             load_UV_half(model, LoRC_weight_path)
         elif LoRC_dtype == "int8":
-            load_UV_int8(model, LoRC_weight_path,low_rank_only=low_rank_only)
-        elif LoRC_dtype == "int3":
-            load_UV_int3(model, LoRC_weight_path,low_rank_only=low_rank_only,symm_flag = False,)
-        elif LoRC_dtype == "int3_symm":
-            load_UV_int3(model, LoRC_weight_path,low_rank_only=low_rank_only,symm_flag = True)
+            load_UV_int8(model, LoRC_weight_path, low_rank_only=low_rank_only)
+        else:
+            load_UV_int3(model, LoRC_weight_path, 64, ranks, LoRC_dtype)
         
 
         # Load other weights that are not part of any module
